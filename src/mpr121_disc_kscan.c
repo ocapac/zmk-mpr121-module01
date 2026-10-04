@@ -79,6 +79,9 @@ static const int32_t disc_row_y_um[4] = {
 #define DISC_BUTTON_COUNT           2
 #define DISC_BUTTON_DEBOUNCE_COUNT  3
 
+#define DISC_TOUCH_DEBOUNCE_COUNT      3
+#define DISC_MIN_EVENT_INTERVAL_MS     150
+
 /*
  * MPR121 registers.
  *
@@ -150,6 +153,11 @@ struct disc_data {
 	bool button_raw[DISC_BUTTON_COUNT];
 	uint8_t button_debounce[DISC_BUTTON_COUNT];
 	bool button_reported[DISC_BUTTON_COUNT];
+
+	bool disc_raw_active;
+	uint8_t disc_debounce_count;
+	bool disc_active;
+	int64_t last_disc_event_ms;
 
 	bool prox_active;
 	bool prox_enter_reported;
@@ -261,6 +269,15 @@ static void disc_report_position(uint32_t position, bool pressed)
 
 static void disc_pulse_position(uint32_t position)
 {
+	int64_t now = k_uptime_get();
+
+	if (disc_data.last_disc_event_ms != 0 &&
+	    (now - disc_data.last_disc_event_ms) < DISC_MIN_EVENT_INTERVAL_MS) {
+		return;
+	}
+
+	disc_data.last_disc_event_ms = now;
+
 	disc_report_position(position, true);
 	disc_report_position(position, false);
 }
@@ -717,6 +734,7 @@ static void disc_scan_mpr121(void)
 	int32_t x = 0;
 	int32_t y = 0;
 	bool has_position;
+	bool raw_active;
 	bool active;
 	int64_t now = k_uptime_get();
 	int err;
@@ -732,9 +750,26 @@ static void disc_scan_mpr121(void)
 	has_position = disc_position_from_state(state, &x, &y);
 
 #if DISC_ENABLE_PROXIMITY
-	bool prox = state != 0;
+	raw_active = (state != 0);
+#else
+	raw_active = has_position;
+#endif
 
-	if (prox && !disc_data.prox_active) {
+	if (raw_active != disc_data.disc_raw_active) {
+		disc_data.disc_raw_active = raw_active;
+		disc_data.disc_debounce_count = 0;
+	} else if (disc_data.disc_debounce_count < DISC_TOUCH_DEBOUNCE_COUNT) {
+		disc_data.disc_debounce_count++;
+	}
+
+	if (disc_data.disc_debounce_count >= DISC_TOUCH_DEBOUNCE_COUNT) {
+		disc_data.disc_active = raw_active;
+	}
+
+	active = disc_data.disc_active;
+
+#if DISC_ENABLE_PROXIMITY
+	if (active && !disc_data.prox_active) {
 		if (disc_data.prox_idle_reported) {
 			disc_report_position(DISC_POS_PROX_IDLE, false);
 			disc_data.prox_idle_reported = false;
@@ -744,7 +779,7 @@ static void disc_scan_mpr121(void)
 		disc_report_position(DISC_POS_PROX_ENTER, true);
 
 		disc_data.no_prox_since_ms = 0;
-	} else if (!prox && disc_data.prox_active) {
+	} else if (!active && disc_data.prox_active) {
 		if (disc_data.prox_enter_reported) {
 			disc_report_position(DISC_POS_PROX_ENTER, false);
 			disc_data.prox_enter_reported = false;
@@ -759,7 +794,7 @@ static void disc_scan_mpr121(void)
 		disc_data.no_prox_since_ms = now;
 	}
 
-	if (!prox && disc_data.no_prox_since_ms != 0) {
+	if (!active && disc_data.no_prox_since_ms != 0) {
 		int64_t idle_ms = now - disc_data.no_prox_since_ms;
 
 		if (!disc_data.prox_idle_reported && idle_ms >= disc_cfg.idle_timeout_ms) {
@@ -768,16 +803,7 @@ static void disc_scan_mpr121(void)
 		}
 	}
 
-	disc_data.prox_active = prox;
-	active = prox;
-#else
-	/*
-	 * Proximity reporting disabled.
-	 *
-	 * Only use the Disc when we can derive a position from at least one
-	 * active row or column electrode.
-	 */
-	active = has_position;
+	disc_data.prox_active = active;
 #endif
 
 	if (!active) {
