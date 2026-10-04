@@ -16,6 +16,7 @@
 
 #define DISC_DEBUG_DISABLE_MPR121_SCAN 0
 #define DISC_DEBUG_DISABLE_MPR121_IRQ  1
+#define DISC_ENABLE_PROXIMITY 0
 
 LOG_MODULE_REGISTER(mpr121_disc, CONFIG_MPR121_MODULE01 ? LOG_LEVEL_INF : LOG_LEVEL_OFF);
 
@@ -701,27 +702,27 @@ static void disc_scan_mpr121(void)
 {
 	uint8_t status[2];
 	uint16_t state;
-	bool prox;
 	int32_t x = 0;
 	int32_t y = 0;
 	bool has_position;
+	bool active;
 	int64_t now = k_uptime_get();
 	int err;
 
 	err = mpr_burst_read(MPR121_REG_TOUCH_STATUS_L, status, sizeof(status));
 	if (err) {
-		LOG_DBG("MPR121 status read failed: %d", err);
 		return;
 	}
 
 	state = ((uint16_t)status[1] << 8) | status[0];
 	state &= 0x00FF;
 
-	prox = state != 0;
 	has_position = disc_position_from_state(state, &x, &y);
 
-	if (prox && !disc_data.prox_active) {
+#if DISC_ENABLE_PROXIMITY
+	bool prox = state != 0;
 
+	if (prox && !disc_data.prox_active) {
 		if (disc_data.prox_idle_reported) {
 			disc_report_position(DISC_POS_PROX_IDLE, false);
 			disc_data.prox_idle_reported = false;
@@ -731,7 +732,6 @@ static void disc_scan_mpr121(void)
 		disc_report_position(DISC_POS_PROX_ENTER, true);
 
 		disc_data.no_prox_since_ms = 0;
-		
 	} else if (!prox && disc_data.prox_active) {
 		if (disc_data.prox_enter_reported) {
 			disc_report_position(DISC_POS_PROX_ENTER, false);
@@ -757,8 +757,22 @@ static void disc_scan_mpr121(void)
 	}
 
 	disc_data.prox_active = prox;
+	active = prox;
+#else
+	/*
+	 * Proximity reporting disabled.
+	 *
+	 * Only use the Disc when we can derive a position from at least one
+	 * active row or column electrode.
+	 */
+	active = has_position;
+#endif
 
-	if (!prox) {
+	if (!active) {
+		if (disc_data.touch_down) {
+			disc_end_touch(now);
+		}
+
 		return;
 	}
 
