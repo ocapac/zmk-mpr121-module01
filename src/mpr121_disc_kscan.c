@@ -886,13 +886,15 @@ static int disc_kscan_init(const struct device *dev)
 	return 0;
 }
 
+#define DISC_KSCAN_INIT_PRIORITY 90
+
 DEVICE_DT_INST_DEFINE(0,
 		      disc_kscan_init,
 		      NULL,
 		      &disc_data,
 		      &disc_cfg,
 		      POST_KERNEL,
-		      CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,
+		      DISC_KSCAN_INIT_PRIORITY,
 		      &disc_kscan_api);
 
 #endif /* DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT) */
