@@ -6,18 +6,11 @@
 
 #if __has_include(<drivers/behavior.h>)
 #include <drivers/behavior.h>
-#else
+#elif __has_include(<zmk/behavior.h>)
 #include <zmk/behavior.h>
 #endif
 
-#if DT_NODE_EXISTS(DT_NODELABEL(DISC_MODE_TOGGLE)) || \
-    DT_NODE_EXISTS(DT_NODELABEL(disc_mode_toggle))
-
-#if DT_NODE_EXISTS(DT_NODELABEL(DISC_MODE_TOGGLE))
-#define DISC_MODE_NODE DT_NODELABEL(DISC_MODE_TOGGLE)
-#else
-#define DISC_MODE_NODE DT_NODELABEL(disc_mode_toggle)
-#endif
+#if DT_NODE_EXISTS(DT_NODELABEL(disc_mode_toggle))
 
 static int disc_mode_binding_pressed(const struct device *dev,
 				     uint32_t position,
@@ -55,7 +48,7 @@ static int disc_mode_behavior_init(const struct device *dev)
 	return 0;
 }
 
-DEVICE_DT_DEFINE(DISC_MODE_NODE,
+DEVICE_DT_DEFINE(DT_NODELABEL(disc_mode_toggle),
 		 disc_mode_behavior_init,
 		 NULL,
 		 NULL,
@@ -64,4 +57,4 @@ DEVICE_DT_DEFINE(DISC_MODE_NODE,
 		 CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,
 		 &disc_mode_behavior_api);
 
-#endif /* DT_NODE_EXISTS(...) */
+#endif /* DT_NODE_EXISTS(DT_NODELABEL(disc_mode_toggle)) */
