@@ -1,0 +1,10 @@
+config MPR121_MODULE01
+	bool "ZMK MPR121 Disc Module 01"
+	default y
+	select GPIO
+	select I2C
+	select KSCAN
+	help
+	  MPR121 capacitive Disc input processor and listener for ZMK.
+	  Provides direct button scanning plus Disc gesture, proximity,
+	  cursor/scroll control, tap, swipe, and rotary behaviors.
