@@ -1,0 +1,8 @@
+description: Disc cursor/scroll mode toggle behavior
+compatible: "zmk,behavior-disc-mode-toggle"
+include: base.yaml
+
+properties:
+  label:
+    type: string
+    required: true
