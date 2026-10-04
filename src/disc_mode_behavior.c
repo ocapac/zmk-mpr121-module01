@@ -100,13 +100,15 @@ static int disc_mode_behavior_init(const struct device *dev)
 	return 0;
 }
 
+#define DISC_MODE_BEHAVIOR_INIT_PRIORITY 91
+
 DEVICE_DT_DEFINE(DISC_MODE_NODE,
 		 disc_mode_behavior_init,
 		 NULL,
 		 NULL,
 		 NULL,
 		 POST_KERNEL,
-		 CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,
+		 DISC_MODE_BEHAVIOR_INIT_PRIORITY,
 		 &disc_mode_behavior_api);
 
 #endif /* DISC_MODE_NODE */
