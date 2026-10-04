@@ -14,6 +14,9 @@
 #include <zmk/hid.h>
 #endif
 
+#define DISC_DEBUG_DISABLE_MPR121_SCAN 1
+#define DISC_DEBUG_DISABLE_MPR121_IRQ  1
+
 LOG_MODULE_REGISTER(mpr121_disc, CONFIG_MPR121_MODULE01 ? LOG_LEVEL_INF : LOG_LEVEL_OFF);
 
 #define DT_DRV_COMPAT zmk_kscan_mpr121_disc
@@ -70,7 +73,7 @@ static const int32_t disc_row_y_um[4] = {
 #define DISC_DECAY_PERCENT          85
 
 #define DISC_BUTTON_COUNT           2
-#define DISC_BUTTON_DEBOUNCE_COUNT  2
+#define DISC_BUTTON_DEBOUNCE_COUNT  5
 
 /*
  * MPR121 registers.
@@ -785,8 +788,11 @@ static void disc_work_handler(struct k_work *work)
 	}
 
 	disc_scan_buttons();
+
+	#if !DISC_DEBUG_DISABLE_MPR121_SCAN
 	disc_scan_mpr121();
 	disc_update_velocity();
+	#endif
 
 	k_work_reschedule(&data->work, K_MSEC(DISC_WORK_INTERVAL_MS));
 }
@@ -871,7 +877,7 @@ static int disc_kscan_init(const struct device *dev)
 		return err;
 	}
 
-	/*
+#if !DISC_DEBUG_DISABLE_MPR121_IRQ
 	err = gpio_pin_interrupt_configure_dt(&disc_cfg.irq, GPIO_INT_EDGE_TO_ACTIVE);
 	if (err) {
 		LOG_ERR("Unable to configure MPR121 IRQ interrupt: %d", err);
@@ -887,7 +893,7 @@ static int disc_kscan_init(const struct device *dev)
 		LOG_ERR("Unable to add MPR121 IRQ callback: %d", err);
 		return err;
 	}
-	*/
+#endif
 
 	err = mpr121_init();
 	if (err) {
