@@ -16,6 +16,7 @@
 
 #define DISC_DEBUG_DISABLE_MPR121_SCAN 0
 #define DISC_DEBUG_DISABLE_MPR121_IRQ  1
+#define DISC_DEBUG_MPR121_READ_ONLY    1
 #define DISC_ENABLE_PROXIMITY 0
 
 LOG_MODULE_REGISTER(mpr121_disc, CONFIG_MPR121_MODULE01 ? LOG_LEVEL_INF : LOG_LEVEL_OFF);
@@ -787,6 +788,37 @@ static void disc_scan_mpr121(void)
 	}
 }
 
+#if DISC_DEBUG_MPR121_READ_ONLY
+static void disc_scan_mpr121_read_only(void)
+{
+	static uint8_t err_count;
+	static bool disabled;
+
+	uint8_t status[2];
+	int err;
+
+	if (disabled) {
+		return;
+	}
+
+	err = mpr_burst_read(MPR121_REG_TOUCH_STATUS_L, status, sizeof(status));
+	if (err) {
+		err_count++;
+
+		if (err_count >= 20) {
+			disabled = true;
+			LOG_ERR("MPR121 read-only scan disabled after repeated I2C errors");
+		} else if ((err_count % 5) == 0 && disc_data.bus != NULL) {
+			i2c_recover_bus(disc_data.bus);
+		}
+
+		return;
+	}
+
+	err_count = 0;
+}
+#endif
+
 static void disc_work_handler(struct k_work *work)
 {
 	struct k_work_delayable *dwork = k_work_delayable_from_work(work);
@@ -798,10 +830,16 @@ static void disc_work_handler(struct k_work *work)
 
 	disc_scan_buttons();
 
-	#if !DISC_DEBUG_DISABLE_MPR121_SCAN
+#if !DISC_DEBUG_DISABLE_MPR121_SCAN
+	
+#if DISC_DEBUG_MPR121_READ_ONLY
+	disc_scan_mpr121_read_only();
+#else
 	disc_scan_mpr121();
 	disc_update_velocity();
-	#endif
+#endif
+	
+#endif
 
 	k_work_reschedule(&data->work, K_MSEC(DISC_WORK_INTERVAL_MS));
 }
