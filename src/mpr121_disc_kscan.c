@@ -360,12 +360,21 @@ static bool disc_position_from_state(uint16_t state, int32_t *x, int32_t *y)
 		}
 	}
 
-	if (col_count == 0 || row_count == 0) {
+	if (col_count == 0 && row_count == 0) {
 		return false;
 	}
 
-	*x = sum_x / col_count;
-	*y = sum_y / row_count;
+	if (col_count > 0) {
+		*x = sum_x / col_count;
+	} else {
+		*x = disc_data.touch_down ? disc_data.last_x_um : 0;
+	}
+
+	if (row_count > 0) {
+		*y = sum_y / row_count;
+	} else {
+		*y = disc_data.touch_down ? disc_data.last_y_um : 0;
+	}
 
 	return true;
 }
@@ -514,9 +523,11 @@ static int mpr121_init(void)
 	mpr_write(MPR121_REG_AFE2, 0x21);
 
 	/*
-	 * Enable electrodes 0 through 7.
+	 * 0x88:
+	 * - enable baseline tracking
+	 * - enable electrodes 0 through 7
 	 */
-	mpr_write(MPR121_REG_ELECTRODE_CONF, 0x08);
+	mpr_write(MPR121_REG_ELECTRODE_CONF, 0x88);
 
 	mpr121_set_sample_period(MPR121_SPS_1MS);
 
