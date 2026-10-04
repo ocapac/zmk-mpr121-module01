@@ -15,7 +15,7 @@
 #endif
 
 #define DISC_DEBUG_DISABLE_MPR121_SCAN 0
-#define DISC_DEBUG_DISABLE_MPR121_IRQ  0
+#define DISC_DEBUG_DISABLE_MPR121_IRQ  1
 
 LOG_MODULE_REGISTER(mpr121_disc, CONFIG_MPR121_MODULE01 ? LOG_LEVEL_INF : LOG_LEVEL_OFF);
 
@@ -62,7 +62,7 @@ static const int32_t disc_row_y_um[4] = {
 	-7425, -2475, 2475, 7425
 };
 
-#define DISC_WORK_INTERVAL_MS       10
+#define DISC_WORK_INTERVAL_MS       16
 
 #define DISC_TAP_MAX_MS             250
 #define DISC_TAP_MAX_MOVE_UM        2500
@@ -73,7 +73,7 @@ static const int32_t disc_row_y_um[4] = {
 #define DISC_DECAY_PERCENT          85
 
 #define DISC_BUTTON_COUNT           2
-#define DISC_BUTTON_DEBOUNCE_COUNT  5
+#define DISC_BUTTON_DEBOUNCE_COUNT  3
 
 /*
  * MPR121 registers.
@@ -108,7 +108,8 @@ static const int32_t disc_row_y_um[4] = {
 #define MPR121_REG_SOFT_RESET       0x80
 
 #define MPR121_SPS_MASK             0x07
-#define MPR121_SPS_1MS              0x04
+#define MPR121_SPS_1MS              0x00
+#define MPR121_SPS_16MS             0x04
 #define MPR121_SPS_128MS            0x07
 
 #define DISC_ZONE_TOP               0
@@ -532,7 +533,7 @@ static int mpr121_init(void)
 	 */
 	mpr_write(MPR121_REG_ELECTRODE_CONF, 0x88);
 
-	mpr121_set_sample_period(MPR121_SPS_1MS);
+	mpr121_set_sample_period(MPR121_SPS_16MS);
 
 	LOG_INF("MPR121 initialized at I2C address 0x%02x", disc_data.addr);
 
@@ -720,10 +721,6 @@ static void disc_scan_mpr121(void)
 	has_position = disc_position_from_state(state, &x, &y);
 
 	if (prox && !disc_data.prox_active) {
-		if (disc_data.sample_slow) {
-			mpr121_set_sample_period(MPR121_SPS_1MS);
-			disc_data.sample_slow = false;
-		}
 
 		if (disc_data.prox_idle_reported) {
 			disc_report_position(DISC_POS_PROX_IDLE, false);
@@ -734,6 +731,7 @@ static void disc_scan_mpr121(void)
 		disc_report_position(DISC_POS_PROX_ENTER, true);
 
 		disc_data.no_prox_since_ms = 0;
+		
 	} else if (!prox && disc_data.prox_active) {
 		if (disc_data.prox_enter_reported) {
 			disc_report_position(DISC_POS_PROX_ENTER, false);
@@ -752,10 +750,7 @@ static void disc_scan_mpr121(void)
 	if (!prox && disc_data.no_prox_since_ms != 0) {
 		int64_t idle_ms = now - disc_data.no_prox_since_ms;
 
-		if (!disc_data.sample_slow && idle_ms >= disc_cfg.idle_timeout_ms) {
-			mpr121_set_sample_period(MPR121_SPS_128MS);
-			disc_data.sample_slow = true;
-
+		if (!disc_data.prox_idle_reported && idle_ms >= disc_cfg.idle_timeout_ms) {
 			disc_report_position(DISC_POS_PROX_IDLE, true);
 			disc_data.prox_idle_reported = true;
 		}
