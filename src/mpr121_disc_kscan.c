@@ -108,7 +108,7 @@ static const int32_t disc_row_y_um[4] = {
 #define MPR121_REG_SOFT_RESET       0x80
 
 #define MPR121_SPS_MASK             0x07
-#define MPR121_SPS_1MS              0x00
+#define MPR121_SPS_1MS              0x04
 #define MPR121_SPS_128MS            0x07
 
 #define DISC_ZONE_TOP               0
