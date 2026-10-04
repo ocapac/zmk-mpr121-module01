@@ -1,0 +1,44 @@
+description: MPR121 capacitive Disc kscan/input processor/listener
+compatible: "zmk,kscan-mpr121-disc"
+include: i2c-device.yaml
+
+properties:
+  irq-gpios:
+    type: phandle-array
+    required: true
+    description: MPR121 IRQ GPIO.
+
+  input-gpios:
+    type: phandle-array
+    required: true
+    description: Direct physical button GPIOs.
+
+  touch-threshold:
+    type: int
+    default: 40
+    description: MPR121 electrode touch threshold.
+
+  prox-threshold:
+    type: int
+    default: 16
+    description: MPR121 electrode proximity/release threshold.
+
+  center-dead-radius-mm:
+    type: int
+    default: 3
+    description: Center no-movement zone radius in mm.
+
+  swipe-threshold-mm:
+    type: int
+    default: 6
+    description: Swipe detection threshold in mm.
+
+  rotary-threshold-deg:
+    type: int
+    default: 25
+    description: Rotary angle threshold in degrees.
+
+  idle-timeout-ms:
+    type: int
+    default: 30000
+    description: No-proximity timeout before low sample rate and idle behavior.
