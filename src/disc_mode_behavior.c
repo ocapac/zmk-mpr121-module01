@@ -2,21 +2,73 @@
 #include <zephyr/devicetree.h>
 #include <zephyr/sys/util.h>
 
+#include <stdbool.h>
+#include <stdint.h>
+
 #include <zmk-mpr121-module01/disc_positions.h>
+
+/*
+ * Try to use the real ZMK behavior headers if available.
+ *
+ * If they are not available, provide compatible local fallbacks so this
+ * module can still compile as an external module.
+ */
+
+#if defined(__has_include)
+
+#if __has_include(<zmk/behavior.h>)
+#include <zmk/behavior.h>
+#define DISC_HAS_ZMK_BEHAVIOR_BINDING 1
+#endif
 
 #if __has_include(<drivers/behavior.h>)
 #include <drivers/behavior.h>
-#elif __has_include(<zmk/behavior.h>)
-#include <zmk/behavior.h>
+#define DISC_HAS_ZMK_BEHAVIOR_DRIVER_API 1
+#endif
+
+#endif /* __has_include */
+
+#ifndef DISC_HAS_ZMK_BEHAVIOR_BINDING
+struct zmk_behavior_binding {
+	char *behavior_dev;
+	uint32_t param1;
+	uint32_t param2;
+};
+#endif
+
+#ifndef DISC_HAS_ZMK_BEHAVIOR_DRIVER_API
+struct behavior_driver_api {
+	int (*binding_convert_central_state_dependent_params)(
+		struct zmk_behavior_binding *binding,
+		uint32_t position,
+		bool state,
+		int64_t timestamp);
+
+	int (*binding_pressed)(
+		struct zmk_behavior_binding *binding,
+		uint32_t position,
+		int64_t timestamp);
+
+	int (*binding_released)(
+		struct zmk_behavior_binding *binding,
+		uint32_t position,
+		int64_t timestamp);
+};
 #endif
 
 #if DT_NODE_EXISTS(DT_NODELABEL(disc_mode_toggle))
+#define DISC_MODE_NODE DT_NODELABEL(disc_mode_toggle)
+#elif DT_NODE_EXISTS(DT_NODELABEL(DISC_MODE_TOGGLE))
+#define DISC_MODE_NODE DT_NODELABEL(DISC_MODE_TOGGLE)
+#endif
 
-static int disc_mode_binding_pressed(const struct device *dev,
+#ifdef DISC_MODE_NODE
+
+static int disc_mode_binding_pressed(struct zmk_behavior_binding *binding,
 				     uint32_t position,
 				     int64_t timestamp)
 {
-	ARG_UNUSED(dev);
+	ARG_UNUSED(binding);
 	ARG_UNUSED(position);
 	ARG_UNUSED(timestamp);
 
@@ -25,11 +77,11 @@ static int disc_mode_binding_pressed(const struct device *dev,
 	return 0;
 }
 
-static int disc_mode_binding_released(const struct device *dev,
+static int disc_mode_binding_released(struct zmk_behavior_binding *binding,
 				      uint32_t position,
 				      int64_t timestamp)
 {
-	ARG_UNUSED(dev);
+	ARG_UNUSED(binding);
 	ARG_UNUSED(position);
 	ARG_UNUSED(timestamp);
 
@@ -48,7 +100,7 @@ static int disc_mode_behavior_init(const struct device *dev)
 	return 0;
 }
 
-DEVICE_DT_DEFINE(DT_NODELABEL(disc_mode_toggle),
+DEVICE_DT_DEFINE(DISC_MODE_NODE,
 		 disc_mode_behavior_init,
 		 NULL,
 		 NULL,
@@ -57,4 +109,4 @@ DEVICE_DT_DEFINE(DT_NODELABEL(disc_mode_toggle),
 		 CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,
 		 &disc_mode_behavior_api);
 
-#endif /* DT_NODE_EXISTS(DT_NODELABEL(disc_mode_toggle)) */
+#endif /* DISC_MODE_NODE */
