@@ -871,6 +871,7 @@ static int disc_kscan_init(const struct device *dev)
 		return err;
 	}
 
+	/*
 	err = gpio_pin_interrupt_configure_dt(&disc_cfg.irq, GPIO_INT_EDGE_TO_ACTIVE);
 	if (err) {
 		LOG_ERR("Unable to configure MPR121 IRQ interrupt: %d", err);
@@ -886,6 +887,7 @@ static int disc_kscan_init(const struct device *dev)
 		LOG_ERR("Unable to add MPR121 IRQ callback: %d", err);
 		return err;
 	}
+	*/
 
 	err = mpr121_init();
 	if (err) {
