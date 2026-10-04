@@ -16,7 +16,9 @@
 
 #define DISC_DEBUG_DISABLE_MPR121_SCAN 0
 #define DISC_DEBUG_DISABLE_MPR121_IRQ  1
-#define DISC_DEBUG_MPR121_READ_ONLY    1
+#define DISC_DEBUG_MPR121_READ_ONLY    0
+#define DISC_DEBUG_DISABLE_DISC_REPORTS 1
+#define DISC_DEBUG_DISABLE_HID_OUTPUT   1
 #define DISC_ENABLE_PROXIMITY 0
 
 LOG_MODULE_REGISTER(mpr121_disc, CONFIG_MPR121_MODULE01 ? LOG_LEVEL_INF : LOG_LEVEL_OFF);
@@ -244,6 +246,12 @@ static int mpr_burst_read(uint8_t reg, uint8_t *buf, uint32_t len)
 
 static void disc_report_position(uint32_t position, bool pressed)
 {
+#if DISC_DEBUG_DISABLE_DISC_REPORTS
+	if (position >= DISC_POS_TAP_CENTER) {
+		return;
+	}
+#endif
+
 	if (disc_data.callback == NULL) {
 		return;
 	}
@@ -642,6 +650,9 @@ static void disc_end_touch(int64_t now)
 
 static void disc_update_velocity(void)
 {
+#if DISC_DEBUG_DISABLE_HID_OUTPUT
+	return;
+#endif
 	int8_t hid_x;
 	int8_t hid_y;
 
