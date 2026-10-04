@@ -14,7 +14,7 @@
 #include <zmk/hid.h>
 #endif
 
-#define DISC_DEBUG_DISABLE_MPR121_SCAN 1
+#define DISC_DEBUG_DISABLE_MPR121_SCAN 0
 #define DISC_DEBUG_DISABLE_MPR121_IRQ  1
 
 LOG_MODULE_REGISTER(mpr121_disc, CONFIG_MPR121_MODULE01 ? LOG_LEVEL_INF : LOG_LEVEL_OFF);
@@ -526,11 +526,10 @@ static int mpr121_init(void)
 	mpr_write(MPR121_REG_AFE2, 0x21);
 
 	/*
-	 * 0x88:
-	 * - enable baseline tracking
-	 * - enable electrodes 0 through 7
+	 * Debug:
+	 * 0x80 enables baseline tracking but no electrodes.
 	 */
-	mpr_write(MPR121_REG_ELECTRODE_CONF, 0x88);
+	mpr_write(MPR121_REG_ELECTRODE_CONF, 0x80);
 
 	mpr121_set_sample_period(MPR121_SPS_1MS);
 
