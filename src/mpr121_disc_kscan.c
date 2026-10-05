@@ -56,9 +56,6 @@ static const int32_t disc_row_y_um[4] = {
 #define DISC_VELOCITY_DIVISOR       1200
 #define DISC_DECAY_PERCENT          85
 
-#define DISC_BUTTON_COUNT           2
-#define DISC_BUTTON_DEBOUNCE_COUNT  3
-
 #define DISC_TOUCH_DEBOUNCE_COUNT      3
 #define DISC_MIN_EVENT_INTERVAL_MS     150
 
@@ -108,8 +105,6 @@ struct disc_cfg {
 	uint16_t addr;
 	struct gpio_dt_spec irq;
 
-	/* struct gpio_dt_spec buttons[DISC_BUTTON_COUNT]; */
-
 	uint8_t touch_threshold;
 	uint8_t prox_threshold;
 
@@ -130,10 +125,6 @@ struct disc_data {
 	struct gpio_callback irq_cb;
 
 	bool enabled;
-
-	bool button_raw[DISC_BUTTON_COUNT];
-	uint8_t button_debounce[DISC_BUTTON_COUNT];
-	bool button_reported[DISC_BUTTON_COUNT];
 
 	bool disc_raw_active;
 	uint8_t disc_debounce_count;
