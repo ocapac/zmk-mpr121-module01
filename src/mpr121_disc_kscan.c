@@ -7,6 +7,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/util.h>
+#include <zephyr/input/input.h>
 
 #include <zmk-mpr121-module01/disc_positions.h>
 
@@ -17,9 +18,9 @@
 #define DISC_DEBUG_DISABLE_MPR121_SCAN 0
 #define DISC_DEBUG_DISABLE_MPR121_IRQ  0
 #define DISC_DEBUG_MPR121_READ_ONLY    0
-#define DISC_DEBUG_DISABLE_DISC_REPORTS 1
+#define DISC_DEBUG_DISABLE_DISC_REPORTS 0
 #define DISC_DEBUG_DISABLE_HID_OUTPUT   0
-#define DISC_ENABLE_PROXIMITY 0
+#define DISC_ENABLE_PROXIMITY 1
 
 LOG_MODULE_REGISTER(mpr121_disc, CONFIG_MPR121_MODULE01 ? LOG_LEVEL_INF : LOG_LEVEL_OFF);
 
@@ -29,27 +30,6 @@ LOG_MODULE_REGISTER(mpr121_disc, CONFIG_MPR121_MODULE01 ? LOG_LEVEL_INF : LOG_LE
 #warning "zmk,kscan-mpr121-disc is not enabled in devicetree"
 #else
 
-/*
- * Weak fallback HID hooks.
- *
- * If the ZMK build already provides mouse/scroll HID functions, those will
- * override these weak symbols. If not, the module still builds.
- */
-int __weak zmk_hid_mouse_move_set(int8_t x, int8_t y)
-{
-	ARG_UNUSED(x);
-	ARG_UNUSED(y);
-
-	return 0;
-}
-
-int __weak zmk_hid_mouse_scroll_set(int8_t x, int8_t y)
-{
-	ARG_UNUSED(x);
-	ARG_UNUSED(y);
-
-	return 0;
-}
 
 /*
  * Disc geometry.
@@ -127,7 +107,8 @@ static const int32_t disc_row_y_um[4] = {
 struct disc_cfg {
 	uint16_t addr;
 	struct gpio_dt_spec irq;
-	struct gpio_dt_spec buttons[DISC_BUTTON_COUNT];
+
+	/* struct gpio_dt_spec buttons[DISC_BUTTON_COUNT]; */
 
 	uint8_t touch_threshold;
 	uint8_t prox_threshold;
@@ -210,11 +191,6 @@ static const struct disc_cfg disc_cfg = {
 	.addr = DT_INST_REG_ADDR(0),
 
 	.irq = GPIO_DT_SPEC_GET(DT_DRV_INST(0), irq_gpios),
-
-	.buttons = {
-		GPIO_DT_SPEC_GET_BY_IDX(DT_DRV_INST(0), input_gpios, 0),
-		GPIO_DT_SPEC_GET_BY_IDX(DT_DRV_INST(0), input_gpios, 1),
-	},
 
 	.touch_threshold = DT_INST_PROP(0, touch_threshold),
 	.prox_threshold = DT_INST_PROP(0, prox_threshold),
@@ -670,15 +646,14 @@ static void disc_update_velocity(void)
 #if DISC_DEBUG_DISABLE_HID_OUTPUT
 	return;
 #endif
+
 	int8_t hid_x;
 	int8_t hid_y;
 
 	if (disc_data.touch_down &&
 	    disc_data.center_armed &&
 	    disc_data.dist_center_um > disc_cfg.center_dead_radius_um) {
-		/*
-		 * Keep current target velocity.
-		 */
+		/* Keep current target velocity */
 	} else {
 		disc_data.vel_x_um = (disc_data.vel_x_um * DISC_DECAY_PERCENT) / 100;
 		disc_data.vel_y_um = (disc_data.vel_y_um * DISC_DECAY_PERCENT) / 100;
@@ -695,35 +670,20 @@ static void disc_update_velocity(void)
 	hid_x = disc_to_hid_count(disc_data.vel_x_um);
 	hid_y = disc_to_hid_count(disc_data.vel_y_um);
 
-	if (disc_mode_get_global() == DISC_MODE_CURSOR) {
-		zmk_hid_mouse_move_set(hid_x, hid_y);
-		zmk_hid_mouse_scroll_set(0, 0);
-	} else {
-		zmk_hid_mouse_move_set(0, 0);
-		zmk_hid_mouse_scroll_set(hid_x, hid_y);
+	if (hid_x == 0 && hid_y == 0) {
+		return;
 	}
-}
 
-static void disc_scan_buttons(void)
-{
-	for (int i = 0; i < DISC_BUTTON_COUNT; i++) {
-		bool raw = gpio_pin_get_dt(&disc_cfg.buttons[i]) > 0;
-
-		if (raw != disc_data.button_raw[i]) {
-			disc_data.button_raw[i] = raw;
-			disc_data.button_debounce[i] = 0;
-			continue;
-		}
-
-		if (disc_data.button_debounce[i] < DISC_BUTTON_DEBOUNCE_COUNT) {
-			disc_data.button_debounce[i]++;
-		}
-
-		if (disc_data.button_debounce[i] == DISC_BUTTON_DEBOUNCE_COUNT &&
-		    raw != disc_data.button_reported[i]) {
-			disc_data.button_reported[i] = raw;
-			disc_report_position(i == 0 ? DISC_POS_BTN0 : DISC_POS_BTN1, raw);
-		}
+	/* 
+	 * Use the modern Zephyr Input API. 
+	 * This integrates natively with ZMK's USB/BLE stacks and input listeners.
+	 */
+	if (disc_mode_get_global() == DISC_MODE_CURSOR) {
+		input_report_rel(disc_data.dev, INPUT_REL_X, hid_x, false);
+		input_report_rel(disc_data.dev, INPUT_REL_Y, hid_y, true);
+	} else {
+		/* Scroll mode */
+		input_report_rel(disc_data.dev, INPUT_REL_WHEEL, hid_y, true);
 	}
 }
 
@@ -865,8 +825,6 @@ static void disc_work_handler(struct k_work *work)
 		return;
 	}
 
-	disc_scan_buttons();
-
 #if !DISC_DEBUG_DISABLE_MPR121_SCAN
 	
 #if DISC_DEBUG_MPR121_READ_ONLY
@@ -936,19 +894,6 @@ static int disc_kscan_init(const struct device *dev)
 	disc_data.addr = disc_cfg.addr;
 
 	k_work_init_delayable(&disc_data.work, disc_work_handler);
-
-	for (int i = 0; i < DISC_BUTTON_COUNT; i++) {
-		if (!gpio_is_ready_dt(&disc_cfg.buttons[i])) {
-			LOG_ERR("Button GPIO %d not ready", i);
-			return -ENODEV;
-		}
-
-		err = gpio_pin_configure_dt(&disc_cfg.buttons[i], GPIO_INPUT);
-		if (err) {
-			LOG_ERR("Unable to configure button GPIO %d: %d", i, err);
-			return err;
-		}
-	}
 
 	if (!gpio_is_ready_dt(&disc_cfg.irq)) {
 		LOG_ERR("MPR121 IRQ GPIO not ready");
