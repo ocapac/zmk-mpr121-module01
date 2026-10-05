@@ -670,11 +670,11 @@ static void disc_update_velocity(void)
 	 * This integrates natively with ZMK's USB/BLE stacks and input listeners.
 	 */
 	if (disc_mode_get_global() == DISC_MODE_CURSOR) {
-		input_report_rel(disc_data.dev, INPUT_REL_X, hid_x, false);
-		input_report_rel(disc_data.dev, INPUT_REL_Y, hid_y, true);
+		input_report_rel(disc_data.dev, INPUT_REL_X, hid_x, false, K_FOREVER);
+		input_report_rel(disc_data.dev, INPUT_REL_Y, hid_y, true, K_FOREVER);
 	} else {
 		/* Scroll mode */
-		input_report_rel(disc_data.dev, INPUT_REL_WHEEL, hid_y, true);
+		input_report_rel(disc_data.dev, INPUT_REL_WHEEL, hid_y, true, K_FOREVER);
 	}
 }
 
