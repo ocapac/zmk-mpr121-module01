@@ -8,11 +8,6 @@ properties:
     required: true
     description: MPR121 IRQ GPIO.
 
-  input-gpios:
-    type: phandle-array
-    required: true
-    description: Direct physical button GPIOs.
-
   touch-threshold:
     type: int
     default: 40
