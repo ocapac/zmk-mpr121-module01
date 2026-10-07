@@ -1,8 +1,5 @@
 #pragma once
 
-#define DISC_POS_BTN0                0
-#define DISC_POS_BTN1                1
-
 #define DISC_POS_TAP_CENTER          2
 #define DISC_POS_TAP_TOP             3
 #define DISC_POS_TAP_BOTTOM          4
