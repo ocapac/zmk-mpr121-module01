@@ -552,7 +552,13 @@ static void disc_start_touch(int32_t x, int32_t y, int64_t now)
 
 	disc_data.dist_center_um = dist;
 
-	disc_data.center_armed = dist <= disc_cfg.center_dead_radius_um;
+	/* 
+	 * DEBUG TEST: Force center_armed to true immediately.
+	 * Once we confirm cursor movement works, we will change this back 
+	 * to: disc_data.center_armed = dist <= disc_cfg.center_dead_radius_um;
+	 */
+	disc_data.center_armed = true; 
+	
 	disc_data.gesture_sent = false;
 
 	disc_data.rotary_active = dist >= DISC_ROTARY_INNER_UM;
@@ -563,6 +569,8 @@ static void disc_start_touch(int32_t x, int32_t y, int64_t now)
 
 	disc_data.vel_x_um = 0;
 	disc_data.vel_y_um = 0;
+	
+	LOG_INF("Touch Start: x=%d y=%d dist=%d armed=%d", x, y, dist, disc_data.center_armed);
 }
 
 static void disc_update_touch(int32_t x, int32_t y, int64_t now)
@@ -673,6 +681,13 @@ static void disc_update_velocity(void)
 	hid_x = disc_to_hid_count(disc_data.vel_x_um);
 	hid_y = disc_to_hid_count(disc_data.vel_y_um);
 
+	/* DEBUG LOG: Print whenever we are trying to move the cursor */
+	if (hid_x != 0 || hid_y != 0) {
+		LOG_INF("Cursor Move: vel_x=%d vel_y=%d -> hid_x=%d hid_y=%d (armed=%d, gesture=%d)", 
+		        disc_data.vel_x_um, disc_data.vel_y_um, hid_x, hid_y, 
+		        disc_data.center_armed, disc_data.gesture_sent);
+	}
+	
 	if (hid_x == 0 && hid_y == 0) {
 		return;
 	}
