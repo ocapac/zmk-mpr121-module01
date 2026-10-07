@@ -277,32 +277,30 @@ static int32_t disc_distance_um(int32_t x, int32_t y)
 
 static int32_t disc_angle_deg(int32_t x, int32_t y)
 {
-	int32_t ax;
-	int32_t ay;
+	int32_t ax = disc_abs(x);
+	int32_t ay = disc_abs(y);
 	int32_t angle;
 
-	if (x == 0 && y == 0) {
+	if (ax == 0 && ay == 0) {
 		return 0;
 	}
 
-	ax = disc_abs(x);
-	ay = disc_abs(y);
+	/* atan2 approximation covering all 4 quadrants */
+	if (ax > ay) {
+		angle = (45 * ay) / ax;
+	} else {
+		angle = 90 - (45 * ax) / ay;
+	}
 
-	angle = (45 * MIN(ax, ay)) / MAX(ax, ay);
-
-	if (x >= 0 && y >= 0) {
+	if (x >= 0 && y <= 0) {
+		return -angle;
+	} else if (x < 0 && y <= 0) {
+		return -180 + angle;
+	} else if (x < 0 && y > 0) {
+		return 180 - angle;
+	} else {
 		return angle;
 	}
-
-	if (x < 0 && y >= 0) {
-		return 180 - angle;
-	}
-
-	if (x < 0 && y < 0) {
-		return -180 + angle;
-	}
-
-	return -angle;
 }
 
 static int32_t disc_angle_diff(int32_t new_angle, int32_t old_angle)
@@ -322,18 +320,22 @@ static int32_t disc_angle_diff(int32_t new_angle, int32_t old_angle)
 
 static int disc_zone_from_angle(int32_t angle)
 {
-	if (angle >= -135 && angle < -45) {
+	/* Top: -45 to -135 degrees */
+	if (angle <= -45 && angle >= -135) {
 		return DISC_ZONE_TOP;
 	}
 
-	if (angle >= 45 && angle < 135) {
+	/* Bottom: 45 to 135 degrees */
+	if (angle >= 45 && angle <= 135) {
 		return DISC_ZONE_BOTTOM;
 	}
 
-	if (angle >= -45 && angle < 45) {
+	/* Right: -45 to 45 degrees */
+	if (angle > -45 && angle < 45) {
 		return DISC_ZONE_RIGHT;
 	}
 
+	/* Left: > 135 or < -135 degrees */
 	return DISC_ZONE_LEFT;
 }
 
@@ -569,8 +571,6 @@ static void disc_update_touch(int32_t x, int32_t y, int64_t now)
 	int32_t dx = x - disc_data.start_x_um;
 	int32_t dy = y - disc_data.start_y_um;
 
-	ARG_UNUSED(now);
-
 	disc_data.last_x_um = x;
 	disc_data.last_y_um = y;
 	disc_data.dist_center_um = dist;
@@ -591,16 +591,26 @@ static void disc_update_touch(int32_t x, int32_t y, int64_t now)
 				bool clockwise = disc_data.accum_angle_deg > 0;
 
 				disc_pulse_position(disc_rotary_position(disc_data.start_zone, clockwise));
-				disc_data.gesture_sent = true;
+				
+				/* Endless rotary: wrap accumulator instead of stopping */
+				if (disc_data.accum_angle_deg > 0) {
+					disc_data.accum_angle_deg -= disc_cfg.rotary_threshold_deg;
+				} else {
+					disc_data.accum_angle_deg += disc_cfg.rotary_threshold_deg;
+				}
 			}
 		} else if (!disc_data.rotary_active &&
-			   MAX(disc_abs(dx), disc_abs(dy)) >= disc_cfg.swipe_threshold_um) {
+			   MAX(disc_abs(dx), disc_abs(dy)) >= disc_cfg.swipe_threshold_um &&
+			   (now - disc_data.touch_start_ms) <= 500) { /* 500ms max swipe duration */
 			disc_pulse_position(disc_swipe_position(dx, dy));
 			disc_data.gesture_sent = true;
 		}
 	}
 
-	if (disc_data.center_armed && dist > disc_cfg.center_dead_radius_um) {
+	/* Only track cursor velocity if no gesture was sent */
+	if (disc_data.center_armed && 
+	    dist > disc_cfg.center_dead_radius_um && 
+	    !disc_data.gesture_sent) {
 		disc_data.vel_x_um = x;
 		disc_data.vel_y_um = y;
 	} else {
@@ -643,7 +653,9 @@ static void disc_update_velocity(void)
 
 	if (disc_data.touch_down &&
 	    disc_data.center_armed &&
-	    disc_data.dist_center_um > disc_cfg.center_dead_radius_um) {
+	    disc_data.dist_center_um > disc_cfg.center_dead_radius_um &&
+	    !disc_data.gesture_sent) {
+		/* Stop cursor if a gesture was triggered */
 		/* Keep current target velocity */
 	} else {
 		disc_data.vel_x_um = (disc_data.vel_x_um * DISC_DECAY_PERCENT) / 100;
