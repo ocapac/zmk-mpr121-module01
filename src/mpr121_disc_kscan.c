@@ -601,7 +601,7 @@ static void disc_update_touch(int32_t x, int32_t y, int64_t now)
 			}
 		} else if (!disc_data.rotary_active &&
 			   MAX(disc_abs(dx), disc_abs(dy)) >= disc_cfg.swipe_threshold_um &&
-			   (now - disc_data.touch_start_ms) <= 250) { /* 250ms max swipe duration */
+			   (now - disc_data.touch_start_ms) <= 150) { /* 150ms max swipe duration */
 			disc_pulse_position(disc_swipe_position(dx, dy));
 			disc_data.gesture_sent = true;
 		}
