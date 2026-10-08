@@ -705,7 +705,7 @@ static void disc_update_velocity(void)
 	}
 }
 
-static bool disc_position_from_capacitance(int32_t *x, int32_t *y)
+static bool disc_position_from_capacitance(uint16_t state, int32_t *x, int32_t *y)
 {
 	uint8_t elec_data[16]; // 8 electrodes × 2 bytes each
 	int err;
@@ -713,22 +713,24 @@ static bool disc_position_from_capacitance(int32_t *x, int32_t *y)
 	// Read electrode filtered data registers (0x04-0x13)
 	err = mpr_burst_read(0x04, elec_data, sizeof(elec_data));
 	if (err) {
+		LOG_DBG("Failed to read capacitance data: %d", err);
 		return false;
 	}
 
 	// Calculate weighted centroid from capacitance values
 	int32_t sum_x = 0;
 	int32_t sum_y = 0;
-	int32_t total_weight = 0;
+	int32_t total_weight_x = 0;
+	int32_t total_weight_y = 0;
 
 	// Columns (electrodes 0-3)
 	for (int i = 0; i < 4; i++) {
 		uint16_t raw = (elec_data[i * 2] << 2) | (elec_data[i * 2 + 1] >> 6);
-		int32_t weight = raw; // Use raw capacitance as weight
+		int32_t weight = raw;
 
-		if (weight > 0) {
+		if (weight > 100) { // Only use significant touches
 			sum_x += disc_col_x_um[i] * weight;
-			total_weight += weight;
+			total_weight_x += weight;
 		}
 	}
 
@@ -737,18 +739,33 @@ static bool disc_position_from_capacitance(int32_t *x, int32_t *y)
 		uint16_t raw = (elec_data[(i + 4) * 2] << 2) | (elec_data[(i + 4) * 2 + 1] >> 6);
 		int32_t weight = raw;
 
-		if (weight > 0) {
+		if (weight > 100) { // Only use significant touches
 			sum_y += disc_row_y_um[i] * weight;
-			total_weight += weight;
+			total_weight_y += weight;
 		}
 	}
 
-	if (total_weight == 0) {
-		return false;
+	// Log for debugging
+	if (total_weight_x > 0 || total_weight_y > 0) {
+		LOG_DBG("Cap data: wx=%d wy=%d", total_weight_x, total_weight_y);
 	}
 
-	*x = sum_x / total_weight;
-	*y = sum_y / total_weight;
+	// Fall back to binary if capacitance data is insufficient
+	if (total_weight_x == 0 && total_weight_y == 0) {
+		return disc_position_from_state(state, x, y);
+	}
+
+	if (total_weight_x > 0) {
+		*x = sum_x / total_weight_x;
+	} else {
+		*x = disc_data.touch_down ? disc_data.last_x_um : 0;
+	}
+
+	if (total_weight_y > 0) {
+		*y = sum_y / total_weight_y;
+	} else {
+		*y = disc_data.touch_down ? disc_data.last_y_um : 0;
+	}
 
 	return true;
 }
@@ -773,8 +790,8 @@ static void disc_scan_mpr121(void)
 	state = ((uint16_t)status[1] << 8) | status[0];
 	state &= 0x00FF;
 
-	// Use capacitance-based position for smooth tracking
-	has_position = disc_position_from_capacitance(&x, &y);
+	// Try capacitance-based first, fall back to binary
+	has_position = disc_position_from_capacitance(state, &x, &y);
 
 #if DISC_ENABLE_PROXIMITY
 	raw_active = (state != 0);
