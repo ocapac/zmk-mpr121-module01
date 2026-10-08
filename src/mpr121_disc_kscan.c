@@ -709,11 +709,10 @@ static void disc_update_velocity(void)
 		disc_data.vel_y_um = (disc_data.vel_y_um * disc_cfg.velocity_decay_percent) / 100;
 
 		// Snap to zero when velocity is very small
-		if (disc_abs(disc_data.vel_x_um) < 100) {
+		if (disc_abs(disc_data.vel_x_um) < 500) {
 			disc_data.vel_x_um = 0;
 		}
-
-		if (disc_abs(disc_data.vel_y_um) < 100) {
+		if (disc_abs(disc_data.vel_y_um) < 500) {
 			disc_data.vel_y_um = 0;
 		}
 	}
