@@ -8,12 +8,8 @@
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/input/input.h>
-
-#include <zmk-mpr121-module01/disc_positions.h>
-
-#if __has_include(<zmk/hid.h>)
 #include <zmk/hid.h>
-#endif
+#include <zmk-mpr121-module01/disc_positions.h>
 
 
 #define DISC_DEBUG_DISABLE_MPR121_SCAN 0
@@ -668,7 +664,6 @@ static void disc_update_velocity(void)
 	    disc_data.center_armed &&
 	    disc_data.dist_center_um > disc_cfg.center_dead_radius_um &&
 	    !disc_data.gesture_sent) {
-		/* Stop cursor if a gesture was triggered */
 		/* Keep current target velocity */
 	} else {
 		disc_data.vel_x_um = (disc_data.vel_x_um * DISC_DECAY_PERCENT) / 100;
@@ -692,20 +687,18 @@ static void disc_update_velocity(void)
 		        disc_data.vel_x_um, disc_data.vel_y_um, hid_x, hid_y, 
 		        disc_data.center_armed, disc_data.gesture_sent);
 	}
-	
+
 	if (hid_x == 0 && hid_y == 0) {
 		return;
 	}
 
-	/* 
-	 * Use the modern Zephyr Input API. 
-	 * This integrates natively with ZMK's USB/BLE stacks and input listeners.
-	 */
+	/* Use ZMK's HID API directly for pointing */
 	if (disc_mode_get_global() == DISC_MODE_CURSOR) {
-		input_report_rel(DEVICE_DT_GET(DT_NODELABEL(disc_input)), INPUT_REL_X, hid_x, false, K_FOREVER);
-		input_report_rel(DEVICE_DT_GET(DT_NODELABEL(disc_input)), INPUT_REL_Y, hid_y, true, K_FOREVER);
+		zmk_hid_mouse_movement_set(hid_x, hid_y);
+		zmk_hid_keyboard_press(0); // Trigger HID report send
 	} else {
-		input_report_rel(DEVICE_DT_GET(DT_NODELABEL(disc_input)), INPUT_REL_WHEEL, hid_y, true, K_FOREVER);
+		zmk_hid_mouse_scroll_set(hid_x, hid_y);
+		zmk_hid_keyboard_press(0); // Trigger HID report send
 	}
 }
 
