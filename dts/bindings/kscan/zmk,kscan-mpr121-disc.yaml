@@ -10,12 +10,12 @@ properties:
 
   touch-threshold:
     type: int
-    default: 40
+    default: 12
     description: MPR121 electrode touch threshold.
 
   prox-threshold:
     type: int
-    default: 16
+    default: 6
     description: MPR121 electrode proximity/release threshold.
 
   center-dead-radius-mm:
@@ -28,6 +28,21 @@ properties:
     default: 6
     description: Swipe detection threshold in mm.
 
+  swipe-duration-max-ms:
+    type: int
+    default: 500
+    description: Maximum duration for swipe detection in ms.
+
+  tap-duration-max-ms:
+    type: int
+    default: 250
+    description: Maximum duration for tap detection in ms.
+
+  tap-move-max-mm:
+    type: int
+    default: 3
+    description: Maximum movement for tap detection in mm.
+
   rotary-threshold-deg:
     type: int
     default: 25
@@ -37,3 +52,23 @@ properties:
     type: int
     default: 30000
     description: No-proximity timeout before low sample rate and idle behavior.
+
+  velocity-divisor:
+    type: int
+    default: 1200
+    description: Divisor for velocity calculation.
+
+  velocity-exponent:
+    type: int
+    default: 150
+    description: Exponent for exponential velocity curve (percentage, 100=linear).
+
+  velocity-max:
+    type: int
+    default: 8
+    description: Maximum HID velocity value.
+
+  velocity-decay-percent:
+    type: int
+    default: 85
+    description: Velocity decay percentage when finger is stationary.
