@@ -692,14 +692,15 @@ static void disc_update_velocity(void)
 		return;
 	}
 
-	/* Use ZMK's HID API directly for pointing */
+		/* Use ZMK's HID API directly for pointing */
 	if (disc_mode_get_global() == DISC_MODE_CURSOR) {
 		zmk_hid_mouse_movement_set(hid_x, hid_y);
-		zmk_hid_keyboard_press(0); // Trigger HID report send
 	} else {
 		zmk_hid_mouse_scroll_set(hid_x, hid_y);
-		zmk_hid_keyboard_press(0); // Trigger HID report send
 	}
+	
+	/* Actually send the pointing report to the host */
+	zmk_endpoints_send_report(HID_USAGE_POINTER);
 }
 
 static bool disc_position_from_capacitance(uint16_t state, int32_t *x, int32_t *y)
