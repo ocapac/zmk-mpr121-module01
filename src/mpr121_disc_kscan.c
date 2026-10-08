@@ -8,6 +8,7 @@
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/input/input.h>
+#include <zmk/endpoints.h>
 #include <zmk/hid.h>
 #include <zmk-mpr121-module01/disc_positions.h>
 
@@ -692,7 +693,7 @@ static void disc_update_velocity(void)
 		return;
 	}
 
-		/* Use ZMK's HID API directly for pointing */
+	/* Use ZMK's HID API directly for pointing */
 	if (disc_mode_get_global() == DISC_MODE_CURSOR) {
 		zmk_hid_mouse_movement_set(hid_x, hid_y);
 	} else {
@@ -700,7 +701,7 @@ static void disc_update_velocity(void)
 	}
 	
 	/* Actually send the pointing report to the host */
-	zmk_endpoints_send_report(HID_USAGE_POINTER);
+	zmk_endpoints_send_report(HID_USAGE_GD_POINTER);
 }
 
 static bool disc_position_from_capacitance(uint16_t state, int32_t *x, int32_t *y)
