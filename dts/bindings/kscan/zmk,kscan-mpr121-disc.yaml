@@ -53,11 +53,6 @@ properties:
     default: 30000
     description: No-proximity timeout before low sample rate and idle behavior.
 
-  velocity-decay-percent:
-    type: int
-    default: 85
-    description: Velocity decay percentage when finger is stationary.
-
   velocity-slow-distance-mm:
     type: int
     default: 3
@@ -77,3 +72,8 @@ properties:
     type: int
     default: 16
     description: Maximum cursor velocity at the edge of the disc.
+
+  velocity-decay-percent:
+    type: int
+    default: 85
+    description: Velocity decay percentage when finger is stationary.
