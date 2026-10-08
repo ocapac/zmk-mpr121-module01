@@ -7,13 +7,23 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/util.h>
-#include <zephyr/input/input.h>
 
 #include <zmk-mpr121-module01/disc_positions.h>
 
 #if __has_include(<zmk/hid.h>)
 #include <zmk/hid.h>
 #endif
+
+#include <zephyr/input/input.h>
+
+/*
+ * Dedicated input device for cursor/scroll reporting.
+ * This is separate from the kscan device.
+ */
+INPUT_DEVICE_DEFINE(mpr121_disc_input,
+		    "mpr121_disc_input",
+		    INPUT_REPORT_REL_X | INPUT_REPORT_REL_Y | INPUT_REPORT_REL_WHEEL,
+		    NULL);
 
 #define DISC_DEBUG_DISABLE_MPR121_SCAN 0
 #define DISC_DEBUG_DISABLE_MPR121_IRQ  0
@@ -643,6 +653,10 @@ static void disc_end_touch(int64_t now)
 
 	disc_data.touch_down = false;
 	disc_data.dist_center_um = 0;
+	
+	// Reset rotary state
+	disc_data.rotary_active = false;
+	disc_data.accum_angle_deg = 0;
 
 	/*
 	 * Velocity is intentionally not zeroed here. It decays in
@@ -697,11 +711,10 @@ static void disc_update_velocity(void)
 	 * This integrates natively with ZMK's USB/BLE stacks and input listeners.
 	 */
 	if (disc_mode_get_global() == DISC_MODE_CURSOR) {
-		input_report_rel(disc_data.dev, INPUT_REL_X, hid_x, false, K_FOREVER);
-		input_report_rel(disc_data.dev, INPUT_REL_Y, hid_y, true, K_FOREVER);
+		input_report_rel(DEVICE_GET(mpr121_disc_input), INPUT_REL_X, hid_x, false, K_FOREVER);
+		input_report_rel(DEVICE_GET(mpr121_disc_input), INPUT_REL_Y, hid_y, true, K_FOREVER);
 	} else {
-		/* Scroll mode */
-		input_report_rel(disc_data.dev, INPUT_REL_WHEEL, hid_y, true, K_FOREVER);
+		input_report_rel(DEVICE_GET(mpr121_disc_input), INPUT_REL_WHEEL, hid_y, true, K_FOREVER);
 	}
 }
 
@@ -725,10 +738,11 @@ static bool disc_position_from_capacitance(uint16_t state, int32_t *x, int32_t *
 
 	// Columns (electrodes 0-3)
 	for (int i = 0; i < 4; i++) {
-		uint16_t raw = (elec_data[i * 2] << 2) | (elec_data[i * 2 + 1] >> 6);
+		// Correct bit extraction: 10-bit value from 2 registers
+		uint16_t raw = ((elec_data[i * 2 + 1] & 0x03) << 8) | elec_data[i * 2];
 		int32_t weight = raw;
 
-		if (weight > 100) { // Only use significant touches
+		if (weight > 20) { // Lower threshold for small electrodes
 			sum_x += disc_col_x_um[i] * weight;
 			total_weight_x += weight;
 		}
@@ -736,10 +750,10 @@ static bool disc_position_from_capacitance(uint16_t state, int32_t *x, int32_t *
 
 	// Rows (electrodes 4-7)
 	for (int i = 0; i < 4; i++) {
-		uint16_t raw = (elec_data[(i + 4) * 2] << 2) | (elec_data[(i + 4) * 2 + 1] >> 6);
+		uint16_t raw = ((elec_data[(i + 4) * 2 + 1] & 0x03) << 8) | elec_data[(i + 4) * 2];
 		int32_t weight = raw;
 
-		if (weight > 100) { // Only use significant touches
+		if (weight > 20) { // Lower threshold for small electrodes
 			sum_y += disc_row_y_um[i] * weight;
 			total_weight_y += weight;
 		}
@@ -747,7 +761,7 @@ static bool disc_position_from_capacitance(uint16_t state, int32_t *x, int32_t *
 
 	// Log for debugging
 	if (total_weight_x > 0 || total_weight_y > 0) {
-		LOG_DBG("Cap data: wx=%d wy=%d", total_weight_x, total_weight_y);
+		LOG_INF("Cap data: wx=%d wy=%d", total_weight_x, total_weight_y);
 	}
 
 	// Fall back to binary if capacitance data is insufficient
