@@ -4,6 +4,7 @@ if(CONFIG_MPR121_MODULE01)
 	zephyr_library_sources(
 		src/disc_mode_behavior.c
 		src/mpr121_disc_kscan.c
+		src/virtual_input.c
 	)
 
 	zephyr_library_include_directories(include)
