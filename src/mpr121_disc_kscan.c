@@ -104,9 +104,10 @@ struct disc_cfg {
 	int32_t rotary_threshold_deg;
 	int32_t idle_timeout_ms;
 
-	int32_t velocity_divisor;
-	int32_t velocity_exponent;
-	int32_t velocity_max;
+	int32_t velocity_slow_distance_um;
+	int32_t velocity_slow_value;
+	int32_t velocity_max_distance_um;
+	int32_t velocity_max_value;
 	int32_t velocity_decay_percent;
 };
 
@@ -191,9 +192,10 @@ static const struct disc_cfg disc_cfg = {
 	.rotary_threshold_deg = DT_INST_PROP(0, rotary_threshold_deg),
 	.idle_timeout_ms = DT_INST_PROP(0, idle_timeout_ms),
 
-	.velocity_divisor = DT_INST_PROP(0, velocity_divisor),
-	.velocity_exponent = DT_INST_PROP(0, velocity_exponent),
-	.velocity_max = DT_INST_PROP(0, velocity_max),
+	.velocity_slow_distance_um = DT_INST_PROP(0, velocity_slow_distance_mm) * 1000,
+	.velocity_slow_value = DT_INST_PROP(0, velocity_slow_value),
+	.velocity_max_distance_um = DT_INST_PROP(0, velocity_max_distance_mm) * 1000,
+	.velocity_max_value = DT_INST_PROP(0, velocity_max_value),
 	.velocity_decay_percent = DT_INST_PROP(0, velocity_decay_percent),
 };
 
@@ -437,30 +439,41 @@ static uint32_t disc_rotary_position(int zone, bool clockwise)
 
 static int8_t disc_to_hid_count(int32_t um)
 {
-	int32_t value;
 	int32_t abs_um = disc_abs(um);
+	int32_t value;
 
 	if (abs_um == 0) {
 		return 0;
 	}
 
-	// Exponential velocity curve
-	// value = (abs_um / divisor) ^ (exponent / 100)
-	int32_t base = abs_um / disc_cfg.velocity_divisor;
-	if (base == 0) {
-		base = 1;
+	// Section 1: Slow acceleration (0 to velocity_slow_distance_um)
+	if (abs_um <= disc_cfg.velocity_slow_distance_um) {
+		// Linear interpolation: value = (abs_um / slow_distance) * slow_value
+		value = (abs_um * disc_cfg.velocity_slow_value) / disc_cfg.velocity_slow_distance_um;
+	}
+	// Section 2: Fast acceleration (slow_distance to max_distance)
+	else if (abs_um <= disc_cfg.velocity_max_distance_um) {
+		int32_t range_um = disc_cfg.velocity_max_distance_um - disc_cfg.velocity_slow_distance_um;
+		int32_t position_in_range = abs_um - disc_cfg.velocity_slow_distance_um;
+		int32_t velocity_range = disc_cfg.velocity_max_value - disc_cfg.velocity_slow_value;
+		
+		// Linear interpolation in fast section
+		value = disc_cfg.velocity_slow_value + 
+		        (position_in_range * velocity_range) / range_um;
+	}
+	// Beyond max distance: clamp to max
+	else {
+		value = disc_cfg.velocity_max_value;
 	}
 
-	// Simple exponential approximation: base * (exponent / 100)
-	value = (base * disc_cfg.velocity_exponent) / 100;
-
-	// Clamp to max
-	if (value > disc_cfg.velocity_max) {
-		value = disc_cfg.velocity_max;
-	}
-
+	// Ensure minimum value of 1 for any non-zero input
 	if (value == 0) {
 		value = 1;
+	}
+
+	// Clamp to max
+	if (value > disc_cfg.velocity_max_value) {
+		value = disc_cfg.velocity_max_value;
 	}
 
 	return (int8_t)(um > 0 ? value : -value);
@@ -692,11 +705,12 @@ static void disc_update_velocity(void)
 		disc_data.vel_x_um = (disc_data.vel_x_um * disc_cfg.velocity_decay_percent) / 100;
 		disc_data.vel_y_um = (disc_data.vel_y_um * disc_cfg.velocity_decay_percent) / 100;
 
-		if (disc_abs(disc_data.vel_x_um) < (disc_cfg.velocity_divisor / 2)) {
+		// Snap to zero when velocity is very small
+		if (disc_abs(disc_data.vel_x_um) < 100) {
 			disc_data.vel_x_um = 0;
 		}
 
-		if (disc_abs(disc_data.vel_y_um) < (disc_cfg.velocity_divisor / 2)) {
+		if (disc_abs(disc_data.vel_y_um) < 100) {
 			disc_data.vel_y_um = 0;
 		}
 	}
