@@ -42,7 +42,6 @@ static const int32_t disc_row_y_um[4] = {
 	-7425, -2475, 2475, 7425
 };
 
-#define DISC_WORK_INTERVAL_MS       16
 #define DISC_ROTARY_INNER_UM        7000
 #define DISC_TOUCH_DEBOUNCE_COUNT      3
 #define DISC_MIN_EVENT_INTERVAL_MS     150
@@ -92,6 +91,8 @@ static const int32_t disc_row_y_um[4] = {
 struct disc_cfg {
 	uint16_t addr;
 	struct gpio_dt_spec irq;
+
+	int32_t sample_period_ms;
 
 	uint8_t touch_threshold;
 	uint8_t prox_threshold;
@@ -180,6 +181,8 @@ static const struct disc_cfg disc_cfg = {
 	.addr = DT_INST_REG_ADDR(0),
 
 	.irq = GPIO_DT_SPEC_GET(DT_DRV_INST(0), irq_gpios),
+
+	.sample_period_ms = DT_INST_PROP(0, sample_period_ms),
 
 	.touch_threshold = DT_INST_PROP(0, touch_threshold),
 	.prox_threshold = DT_INST_PROP(0, prox_threshold),
@@ -961,7 +964,7 @@ static void disc_work_handler(struct k_work *work)
 	
 #endif
 
-	k_work_reschedule(&data->work, K_MSEC(DISC_WORK_INTERVAL_MS));
+	k_work_reschedule(&data->work, K_MSEC(disc_cfg.sample_period_ms));
 }
 
 static void disc_irq_callback(const struct device *gpio_dev,
