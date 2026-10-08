@@ -705,6 +705,54 @@ static void disc_update_velocity(void)
 	}
 }
 
+static bool disc_position_from_capacitance(int32_t *x, int32_t *y)
+{
+	uint8_t elec_data[16]; // 8 electrodes × 2 bytes each
+	int err;
+
+	// Read electrode filtered data registers (0x04-0x13)
+	err = mpr_burst_read(0x04, elec_data, sizeof(elec_data));
+	if (err) {
+		return false;
+	}
+
+	// Calculate weighted centroid from capacitance values
+	int32_t sum_x = 0;
+	int32_t sum_y = 0;
+	int32_t total_weight = 0;
+
+	// Columns (electrodes 0-3)
+	for (int i = 0; i < 4; i++) {
+		uint16_t raw = (elec_data[i * 2] << 2) | (elec_data[i * 2 + 1] >> 6);
+		int32_t weight = raw; // Use raw capacitance as weight
+
+		if (weight > 0) {
+			sum_x += disc_col_x_um[i] * weight;
+			total_weight += weight;
+		}
+	}
+
+	// Rows (electrodes 4-7)
+	for (int i = 0; i < 4; i++) {
+		uint16_t raw = (elec_data[(i + 4) * 2] << 2) | (elec_data[(i + 4) * 2 + 1] >> 6);
+		int32_t weight = raw;
+
+		if (weight > 0) {
+			sum_y += disc_row_y_um[i] * weight;
+			total_weight += weight;
+		}
+	}
+
+	if (total_weight == 0) {
+		return false;
+	}
+
+	*x = sum_x / total_weight;
+	*y = sum_y / total_weight;
+
+	return true;
+}
+
 static void disc_scan_mpr121(void)
 {
 	uint8_t status[2];
@@ -725,7 +773,8 @@ static void disc_scan_mpr121(void)
 	state = ((uint16_t)status[1] << 8) | status[0];
 	state &= 0x00FF;
 
-	has_position = disc_position_from_state(state, &x, &y);
+	// Use capacitance-based position for smooth tracking
+	has_position = disc_position_from_capacitance(&x, &y);
 
 #if DISC_ENABLE_PROXIMITY
 	raw_active = (state != 0);
