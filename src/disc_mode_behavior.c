@@ -34,25 +34,26 @@ struct zmk_behavior_binding {
 	uint32_t param1;
 	uint32_t param2;
 };
+
+struct zmk_behavior_binding_event {
+	uint32_t position;
+	int64_t timestamp;
+};
 #endif
 
 #ifndef DISC_HAS_ZMK_BEHAVIOR_DRIVER_API
 struct behavior_driver_api {
 	int (*binding_convert_central_state_dependent_params)(
 		struct zmk_behavior_binding *binding,
-		uint32_t position,
-		bool state,
-		int64_t timestamp);
+		struct zmk_behavior_binding_event event);
 
 	int (*binding_pressed)(
 		struct zmk_behavior_binding *binding,
-		uint32_t position,
-		int64_t timestamp);
+		struct zmk_behavior_binding_event event);
 
 	int (*binding_released)(
 		struct zmk_behavior_binding *binding,
-		uint32_t position,
-		int64_t timestamp);
+		struct zmk_behavior_binding_event event);
 };
 #endif
 
@@ -65,12 +66,10 @@ struct behavior_driver_api {
 #ifdef DISC_MODE_NODE
 
 static int disc_mode_binding_pressed(struct zmk_behavior_binding *binding,
-				     uint32_t position,
-				     int64_t timestamp)
+				     struct zmk_behavior_binding_event event)
 {
 	ARG_UNUSED(binding);
-	ARG_UNUSED(position);
-	ARG_UNUSED(timestamp);
+	ARG_UNUSED(event);
 
 	disc_mode_toggle_global();
 
@@ -78,12 +77,10 @@ static int disc_mode_binding_pressed(struct zmk_behavior_binding *binding,
 }
 
 static int disc_mode_binding_released(struct zmk_behavior_binding *binding,
-				      uint32_t position,
-				      int64_t timestamp)
+				      struct zmk_behavior_binding_event event)
 {
 	ARG_UNUSED(binding);
-	ARG_UNUSED(position);
-	ARG_UNUSED(timestamp);
+	ARG_UNUSED(event);
 
 	return 0;
 }
