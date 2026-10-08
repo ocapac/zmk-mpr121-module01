@@ -1,4 +1,0 @@
-description: Virtual input device for cursor/scroll reporting
-compatible: "zmk,virtual-input"
-
-include: base.yaml
