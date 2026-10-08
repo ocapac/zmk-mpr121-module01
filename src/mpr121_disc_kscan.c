@@ -43,15 +43,7 @@ static const int32_t disc_row_y_um[4] = {
 };
 
 #define DISC_WORK_INTERVAL_MS       16
-
-#define DISC_TAP_MAX_MS             250
-#define DISC_TAP_MAX_MOVE_UM        2500
-
 #define DISC_ROTARY_INNER_UM        7000
-
-#define DISC_VELOCITY_DIVISOR       1200
-#define DISC_DECAY_PERCENT          85
-
 #define DISC_TOUCH_DEBOUNCE_COUNT      3
 #define DISC_MIN_EVENT_INTERVAL_MS     150
 
@@ -106,8 +98,16 @@ struct disc_cfg {
 
 	int32_t center_dead_radius_um;
 	int32_t swipe_threshold_um;
+	int32_t swipe_duration_max_ms;
+	int32_t tap_duration_max_ms;
+	int32_t tap_move_max_um;
 	int32_t rotary_threshold_deg;
 	int32_t idle_timeout_ms;
+
+	int32_t velocity_divisor;
+	int32_t velocity_exponent;
+	int32_t velocity_max;
+	int32_t velocity_decay_percent;
 };
 
 struct disc_data {
@@ -143,6 +143,7 @@ struct disc_data {
 	int32_t dist_center_um;
 
 	bool center_armed;
+	bool gesture_active;  // True when any gesture is being processed
 	bool gesture_sent;
 
 	bool rotary_active;
@@ -184,8 +185,16 @@ static const struct disc_cfg disc_cfg = {
 
 	.center_dead_radius_um = DT_INST_PROP(0, center_dead_radius_mm) * 1000,
 	.swipe_threshold_um = DT_INST_PROP(0, swipe_threshold_mm) * 1000,
+	.swipe_duration_max_ms = DT_INST_PROP(0, swipe_duration_max_ms),
+	.tap_duration_max_ms = DT_INST_PROP(0, tap_duration_max_ms),
+	.tap_move_max_um = DT_INST_PROP(0, tap_move_max_mm) * 1000,
 	.rotary_threshold_deg = DT_INST_PROP(0, rotary_threshold_deg),
 	.idle_timeout_ms = DT_INST_PROP(0, idle_timeout_ms),
+
+	.velocity_divisor = DT_INST_PROP(0, velocity_divisor),
+	.velocity_exponent = DT_INST_PROP(0, velocity_exponent),
+	.velocity_max = DT_INST_PROP(0, velocity_max),
+	.velocity_decay_percent = DT_INST_PROP(0, velocity_decay_percent),
 };
 
 static int mpr_write(uint8_t reg, uint8_t val)
@@ -429,18 +438,32 @@ static uint32_t disc_rotary_position(int zone, bool clockwise)
 static int8_t disc_to_hid_count(int32_t um)
 {
 	int32_t value;
+	int32_t abs_um = disc_abs(um);
 
-	if (um == 0) {
+	if (abs_um == 0) {
 		return 0;
 	}
 
-	value = um / DISC_VELOCITY_DIVISOR;
-
-	if (value == 0) {
-		value = um > 0 ? 1 : -1;
+	// Exponential velocity curve
+	// value = (abs_um / divisor) ^ (exponent / 100)
+	int32_t base = abs_um / disc_cfg.velocity_divisor;
+	if (base == 0) {
+		base = 1;
 	}
 
-	return (int8_t)disc_clamp(value, -8, 8);
+	// Simple exponential approximation: base * (exponent / 100)
+	value = (base * disc_cfg.velocity_exponent) / 100;
+
+	// Clamp to max
+	if (value > disc_cfg.velocity_max) {
+		value = disc_cfg.velocity_max;
+	}
+
+	if (value == 0) {
+		value = 1;
+	}
+
+	return (int8_t)(um > 0 ? value : -value);
 }
 
 static int mpr121_set_sample_period(uint8_t sps)
@@ -596,25 +619,29 @@ static void disc_update_touch(int32_t x, int32_t y, int64_t now)
 
 				disc_pulse_position(disc_rotary_position(disc_data.start_zone, clockwise));
 				
-				/* Endless rotary: wrap accumulator instead of stopping */
+				// Endless rotary: wrap accumulator
 				if (disc_data.accum_angle_deg > 0) {
 					disc_data.accum_angle_deg -= disc_cfg.rotary_threshold_deg;
 				} else {
 					disc_data.accum_angle_deg += disc_cfg.rotary_threshold_deg;
 				}
+				
+				disc_data.gesture_active = true;  // Disable cursor during rotary
 			}
 		} else if (!disc_data.rotary_active &&
 			   MAX(disc_abs(dx), disc_abs(dy)) >= disc_cfg.swipe_threshold_um &&
-			   (now - disc_data.touch_start_ms) <= 150) { /* 150ms max swipe duration */
+			   (now - disc_data.touch_start_ms) <= disc_cfg.swipe_duration_max_ms) {
 			disc_pulse_position(disc_swipe_position(dx, dy));
 			disc_data.gesture_sent = true;
+			disc_data.gesture_active = true;  // Disable cursor during swipe
 		}
 	}
 
-	/* Only track cursor velocity if no gesture was sent */
+	// Only track cursor velocity if no gesture is active
 	if (disc_data.center_armed && 
 	    dist > disc_cfg.center_dead_radius_um && 
-	    !disc_data.gesture_sent) {
+	    !disc_data.gesture_sent &&
+	    !disc_data.gesture_active) {
 		disc_data.vel_x_um = x;
 		disc_data.vel_y_um = y;
 	} else {
@@ -631,8 +658,8 @@ static void disc_end_touch(int64_t now)
 	int64_t duration = now - disc_data.touch_start_ms;
 
 	if (!disc_data.gesture_sent &&
-	    duration <= DISC_TAP_MAX_MS &&
-	    move <= DISC_TAP_MAX_MOVE_UM) {
+	    duration <= disc_cfg.tap_duration_max_ms &&
+	    move <= disc_cfg.tap_move_max_um) {
 		disc_pulse_position(disc_tap_position(disc_data.start_x_um,
 						      disc_data.start_y_um));
 	}
@@ -640,14 +667,10 @@ static void disc_end_touch(int64_t now)
 	disc_data.touch_down = false;
 	disc_data.dist_center_um = 0;
 	
-	// Reset rotary state
+	// Reset rotary and gesture state
 	disc_data.rotary_active = false;
 	disc_data.accum_angle_deg = 0;
-
-	/*
-	 * Velocity is intentionally not zeroed here. It decays in
-	 * disc_update_velocity() while no finger is present.
-	 */
+	disc_data.gesture_active = false;
 }
 
 static void disc_update_velocity(void)
@@ -662,17 +685,18 @@ static void disc_update_velocity(void)
 	if (disc_data.touch_down &&
 	    disc_data.center_armed &&
 	    disc_data.dist_center_um > disc_cfg.center_dead_radius_um &&
-	    !disc_data.gesture_sent) {
-		/* Keep current target velocity */
+	    !disc_data.gesture_sent &&
+	    !disc_data.gesture_active) {
+		// Keep current target velocity
 	} else {
-		disc_data.vel_x_um = (disc_data.vel_x_um * DISC_DECAY_PERCENT) / 100;
-		disc_data.vel_y_um = (disc_data.vel_y_um * DISC_DECAY_PERCENT) / 100;
+		disc_data.vel_x_um = (disc_data.vel_x_um * disc_cfg.velocity_decay_percent) / 100;
+		disc_data.vel_y_um = (disc_data.vel_y_um * disc_cfg.velocity_decay_percent) / 100;
 
-		if (disc_abs(disc_data.vel_x_um) < (DISC_VELOCITY_DIVISOR / 2)) {
+		if (disc_abs(disc_data.vel_x_um) < (disc_cfg.velocity_divisor / 2)) {
 			disc_data.vel_x_um = 0;
 		}
 
-		if (disc_abs(disc_data.vel_y_um) < (DISC_VELOCITY_DIVISOR / 2)) {
+		if (disc_abs(disc_data.vel_y_um) < (disc_cfg.velocity_divisor / 2)) {
 			disc_data.vel_y_um = 0;
 		}
 	}
@@ -680,7 +704,6 @@ static void disc_update_velocity(void)
 	hid_x = disc_to_hid_count(disc_data.vel_x_um);
 	hid_y = disc_to_hid_count(disc_data.vel_y_um);
 
-	/* DEBUG LOG: Print whenever we are trying to move the cursor */
 	if (hid_x != 0 || hid_y != 0) {
 		LOG_INF("Cursor Move: vel_x=%d vel_y=%d -> hid_x=%d hid_y=%d (armed=%d, gesture=%d)", 
 		        disc_data.vel_x_um, disc_data.vel_y_um, hid_x, hid_y, 
@@ -691,7 +714,6 @@ static void disc_update_velocity(void)
 		return;
 	}
 
-	/* Use Zephyr input subsystem for pointing */
 	if (disc_mode_get_global() == DISC_MODE_CURSOR) {
 		input_report_rel(disc_data.dev, INPUT_REL_X, hid_x, false, K_FOREVER);
 		input_report_rel(disc_data.dev, INPUT_REL_Y, hid_y, true, K_FOREVER);
