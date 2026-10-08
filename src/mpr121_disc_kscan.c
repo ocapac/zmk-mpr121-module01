@@ -7,6 +7,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/util.h>
+#include <zephyr/input/input.h>
 
 #include <zmk-mpr121-module01/disc_positions.h>
 
@@ -14,16 +15,6 @@
 #include <zmk/hid.h>
 #endif
 
-#include <zephyr/input/input.h>
-
-/*
- * Dedicated input device for cursor/scroll reporting.
- * This is separate from the kscan device.
- */
-INPUT_DEVICE_DEFINE(mpr121_disc_input,
-		    "mpr121_disc_input",
-		    INPUT_REPORT_REL_X | INPUT_REPORT_REL_Y | INPUT_REPORT_REL_WHEEL,
-		    NULL);
 
 #define DISC_DEBUG_DISABLE_MPR121_SCAN 0
 #define DISC_DEBUG_DISABLE_MPR121_IRQ  0
@@ -711,10 +702,10 @@ static void disc_update_velocity(void)
 	 * This integrates natively with ZMK's USB/BLE stacks and input listeners.
 	 */
 	if (disc_mode_get_global() == DISC_MODE_CURSOR) {
-		input_report_rel(DEVICE_GET(mpr121_disc_input), INPUT_REL_X, hid_x, false, K_FOREVER);
-		input_report_rel(DEVICE_GET(mpr121_disc_input), INPUT_REL_Y, hid_y, true, K_FOREVER);
+		input_report_rel(DEVICE_DT_GET(DT_NODELABEL(disc_input)), INPUT_REL_X, hid_x, false, K_FOREVER);
+		input_report_rel(DEVICE_DT_GET(DT_NODELABEL(disc_input)), INPUT_REL_Y, hid_y, true, K_FOREVER);
 	} else {
-		input_report_rel(DEVICE_GET(mpr121_disc_input), INPUT_REL_WHEEL, hid_y, true, K_FOREVER);
+		input_report_rel(DEVICE_DT_GET(DT_NODELABEL(disc_input)), INPUT_REL_WHEEL, hid_y, true, K_FOREVER);
 	}
 }
 
