@@ -8,6 +8,11 @@ properties:
     required: true
     description: MPR121 IRQ GPIO.
 
+  sample-period-ms:
+    type: int
+    default: 16
+    description: MPR121 sample period in milliseconds.
+
   touch-threshold:
     type: int
     default: 12
