@@ -722,6 +722,7 @@ static bool disc_position_from_capacitance(uint16_t state, int32_t *x, int32_t *
 	}
 
 	// Calculate weighted centroid from capacitance values
+	// Only use electrodes that are actually touched (based on state bits)
 	int32_t sum_x = 0;
 	int32_t sum_y = 0;
 	int32_t total_weight_x = 0;
@@ -729,24 +730,32 @@ static bool disc_position_from_capacitance(uint16_t state, int32_t *x, int32_t *
 
 	// Columns (electrodes 0-3)
 	for (int i = 0; i < 4; i++) {
-		// Correct bit extraction: 10-bit value from 2 registers
-		uint16_t raw = ((elec_data[i * 2 + 1] & 0x03) << 8) | elec_data[i * 2];
-		int32_t weight = raw;
+		// Only use this electrode if it's in the touch state
+		if (state & BIT(i)) {
+			// Correct bit extraction: 10-bit value from 2 registers
+			uint16_t raw = ((elec_data[i * 2 + 1] & 0x03) << 8) | elec_data[i * 2];
+			// Invert: lower raw value = stronger touch = higher weight
+			int32_t weight = 1024 - raw;
 
-		if (weight > 20) { // Lower threshold for small electrodes
-			sum_x += disc_col_x_um[i] * weight;
-			total_weight_x += weight;
+			if (weight > 0) {
+				sum_x += disc_col_x_um[i] * weight;
+				total_weight_x += weight;
+			}
 		}
 	}
 
 	// Rows (electrodes 4-7)
 	for (int i = 0; i < 4; i++) {
-		uint16_t raw = ((elec_data[(i + 4) * 2 + 1] & 0x03) << 8) | elec_data[(i + 4) * 2];
-		int32_t weight = raw;
+		// Only use this electrode if it's in the touch state
+		if (state & BIT(4 + i)) {
+			uint16_t raw = ((elec_data[(i + 4) * 2 + 1] & 0x03) << 8) | elec_data[(i + 4) * 2];
+			// Invert: lower raw value = stronger touch = higher weight
+			int32_t weight = 1024 - raw;
 
-		if (weight > 20) { // Lower threshold for small electrodes
-			sum_y += disc_row_y_um[i] * weight;
-			total_weight_y += weight;
+			if (weight > 0) {
+				sum_y += disc_row_y_um[i] * weight;
+				total_weight_y += weight;
+			}
 		}
 	}
 
